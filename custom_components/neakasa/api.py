@@ -9,6 +9,7 @@ import hmac
 import hashlib
 import base64
 from .api_encryption import APIEncryption
+from .const import _LOGGER
 
 #############################
 # Neakasa API by @timniklas #
