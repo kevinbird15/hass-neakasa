@@ -211,16 +211,15 @@ class NeakasaCoordinator(DataUpdateCoordinator):
                 _LOGGER.error(f"Failed to reconnect API for device {self.devicename}: {reconnect_err}")
                 raise UpdateFailed(f"Authentication failed and reconnection failed: {err}") from err
         except APIConnectionError as err:
-            _LOGGER.error(err)
             # Check if this is an identityId error, which indicates authentication issues
             if "identityId is blank" in str(err):
-                _LOGGER.warning(f"IdentityId error for device {self.devicename}, clearing shared API and attempting to reconnect: {err}")
+                _LOGGER.debug(f"IdentityId error for device {self.devicename}, attempting automatic reconnection")
                 try:
                     # Clear the shared API to force a fresh connection
                     from . import clear_shared_api, force_reconnect_api
                     clear_shared_api(self.username, self.password)
                     api = await force_reconnect_api(self.hass, self.username, self.password)
-                    _LOGGER.info(f"Successfully reconnected API after identityId error for device {self.devicename}")
+                    _LOGGER.debug(f"Successfully reconnected API for device {self.devicename}")
                     # Retry the data fetch after reconnection
                     devicedata = await api.getDeviceProperties(self.deviceid)
                     # Continue with the rest of the data processing...
@@ -254,4 +253,5 @@ class NeakasaCoordinator(DataUpdateCoordinator):
                     _LOGGER.error(f"Failed to reconnect API after identityId error for device {self.devicename}: {reconnect_err}")
                     raise UpdateFailed(f"IdentityId error and reconnection failed: {err}") from err
             else:
+                _LOGGER.error(f"API connection error for device {self.devicename}: {err}")
                 raise UpdateFailed(err) from err

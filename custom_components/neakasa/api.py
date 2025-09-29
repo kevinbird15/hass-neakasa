@@ -326,13 +326,16 @@ class NeakasaAPI:
         )
         response_data = json.loads(response.body)
         if response_data['code'] != 200:
-            _LOGGER.error(f"API Error - Code: {response_data['code']}, Message: {response_data['message']}")
-            _LOGGER.error(f"iotToken: {self._iotToken[:20] if hasattr(self, '_iotToken') and self._iotToken else 'None'}...")
             # Check for specific authentication errors that should trigger reconnection
             if "identityId is blank" in response_data['message']:
-                _LOGGER.warning(f"IdentityId error detected, marking API as disconnected")
+                _LOGGER.debug(f"IdentityId error detected, marking API as disconnected for automatic reconnection")
                 self.connected = False
-            raise APIConnectionError("Error getting device properties: " + response_data['message'])
+                raise APIConnectionError("Error getting device properties: " + response_data['message'])
+            else:
+                # For other errors, log as error since they're not automatically recoverable
+                _LOGGER.error(f"API Error - Code: {response_data['code']}, Message: {response_data['message']}")
+                _LOGGER.error(f"iotToken: {self._iotToken[:20] if hasattr(self, '_iotToken') and self._iotToken else 'None'}...")
+                raise APIConnectionError("Error getting device properties: " + response_data['message'])
         return response_data['data']
 
     async def setDeviceProperties(self, iotId: str, items: dict[str, any]):
