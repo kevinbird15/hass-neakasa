@@ -214,10 +214,11 @@ class NeakasaCoordinator(DataUpdateCoordinator):
             _LOGGER.error(err)
             # Check if this is an identityId error, which indicates authentication issues
             if "identityId is blank" in str(err):
-                _LOGGER.warning(f"IdentityId error for device {self.devicename}, attempting to reconnect: {err}")
+                _LOGGER.warning(f"IdentityId error for device {self.devicename}, clearing shared API and attempting to reconnect: {err}")
                 try:
-                    # Force reconnection of the API
-                    from . import force_reconnect_api
+                    # Clear the shared API to force a fresh connection
+                    from . import clear_shared_api, force_reconnect_api
+                    clear_shared_api(self.username, self.password)
                     api = await force_reconnect_api(self.hass, self.username, self.password)
                     _LOGGER.info(f"Successfully reconnected API after identityId error for device {self.devicename}")
                     # Retry the data fetch after reconnection

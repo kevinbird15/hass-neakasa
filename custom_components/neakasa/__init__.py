@@ -52,7 +52,7 @@ async def get_shared_api(hass: HomeAssistant, username: str, password: str) -> N
                 return api
             else:
                 # Clear invalid API instance
-                _LOGGER.debug(f"Clearing invalid API instance for {username}")
+                _LOGGER.debug(f"Clearing invalid API instance for {username} (connected: {api.connected}, has_token: {hasattr(api, '_iotToken') and api._iotToken})")
                 del _shared_apis[credentials_key]
         
         # Create new API instance
@@ -147,22 +147,22 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
 
     # Remove the config entry from the hass data object.
     if unload_ok:
-        hass.data[DOMAIN].pop(config_entry.entry_id)
-        
-        # Clear shared API for this device's credentials if no other devices use them
+        # Get coordinator info before removing the entry
         coordinator = hass.data[DOMAIN][config_entry.entry_id].coordinator
         username = coordinator.username
         password = coordinator.password
         
+        # Remove the entry from hass data
+        hass.data[DOMAIN].pop(config_entry.entry_id)
+        
         # Check if any other devices are using the same credentials
         other_devices_using_creds = False
         for entry_id, runtime_data in hass.data[DOMAIN].items():
-            if entry_id != config_entry.entry_id:
-                other_coordinator = runtime_data.coordinator
-                if (other_coordinator.username == username and 
-                    other_coordinator.password == password):
-                    other_devices_using_creds = True
-                    break
+            other_coordinator = runtime_data.coordinator
+            if (other_coordinator.username == username and 
+                other_coordinator.password == password):
+                other_devices_using_creds = True
+                break
         
         # Only clear the shared API if no other devices are using these credentials
         if not other_devices_using_creds:
