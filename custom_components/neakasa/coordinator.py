@@ -168,16 +168,15 @@ class NeakasaCoordinator(DataUpdateCoordinator):
                     record_list=records['record_list']
                 )
             except Exception as err:
-                _LOGGER.exception(err)
+                _LOGGER.error(err)
                 # This will show entities as unavailable by raising UpdateFailed exception
                 raise UpdateFailed(f"Got no data from api, please try to restart your litter box.") from err
         except APIAuthError as err:
             _LOGGER.warning(f"Authentication error for device {self.devicename}, attempting to reconnect: {err}")
             try:
-                # Clear the API instance and try to reconnect
-                from . import clear_shared_api, get_shared_api
-                clear_shared_api(self.username, self.password)
-                api = await get_shared_api(self.hass, self.username, self.password)
+                # Force reconnection of the API
+                from . import force_reconnect_api
+                api = await force_reconnect_api(self.hass, self.username, self.password)
                 _LOGGER.info(f"Successfully reconnected API for device {self.devicename}")
                 # Retry the data fetch after reconnection
                 devicedata = await api.getDeviceProperties(self.deviceid)
@@ -212,5 +211,46 @@ class NeakasaCoordinator(DataUpdateCoordinator):
                 _LOGGER.error(f"Failed to reconnect API for device {self.devicename}: {reconnect_err}")
                 raise UpdateFailed(f"Authentication failed and reconnection failed: {err}") from err
         except APIConnectionError as err:
-            _LOGGER.exception(err)
-            raise UpdateFailed(err) from err
+            _LOGGER.error(err)
+            # Check if this is an identityId error, which indicates authentication issues
+            if "identityId is blank" in str(err):
+                _LOGGER.warning(f"IdentityId error for device {self.devicename}, attempting to reconnect: {err}")
+                try:
+                    # Force reconnection of the API
+                    from . import force_reconnect_api
+                    api = await force_reconnect_api(self.hass, self.username, self.password)
+                    _LOGGER.info(f"Successfully reconnected API after identityId error for device {self.devicename}")
+                    # Retry the data fetch after reconnection
+                    devicedata = await api.getDeviceProperties(self.deviceid)
+                    # Continue with the rest of the data processing...
+                    newLastUseDate = devicedata['catLeft']['time']
+                    if self.lastUseDate != newLastUseDate:
+                        self._recordsCache.mark_as_stale()
+                    self.lastUseDate = newLastUseDate
+                    records = await self._getRecords()
+                    
+                    return NeakasaAPIData(
+                        binFullWaitReset=devicedata['binFullWaitReset']['value'] == 1,
+                        cleanCfg=devicedata['cleanCfg']['value'],
+                        youngCatMode=devicedata['youngCatMode']['value'] == 1,
+                        childLockOnOff=devicedata['childLockOnOff']['value'] == 1,
+                        autoBury=devicedata['autoBury']['value'] == 1,
+                        autoLevel=devicedata['autoLevel']['value'] == 1,
+                        silentMode=devicedata['silentMode']['value'] == 1,
+                        autoForceInit=devicedata['autoForceInit']['value'] == 1,
+                        bIntrptRangeDet=devicedata['bIntrptRangeDet']['value'] == 1,
+                        sandLevelPercent=devicedata['Sand']['value']['percent'],
+                        wifiRssi=devicedata['NetWorkStatus']['value']['WiFi_RSSI'],
+                        bucketStatus=devicedata['bucketStatus']['value'],
+                        room_of_bin=devicedata['room_of_bin']['value'],
+                        sandLevelState=devicedata['Sand']['value']['level'],
+                        stayTime=devicedata['catLeft']['value'].get('stayTime', 0),
+                        lastUse=newLastUseDate,
+                        cat_list=records['cat_list'],
+                        record_list=records['record_list']
+                    )
+                except Exception as reconnect_err:
+                    _LOGGER.error(f"Failed to reconnect API after identityId error for device {self.devicename}: {reconnect_err}")
+                    raise UpdateFailed(f"IdentityId error and reconnection failed: {err}") from err
+            else:
+                raise UpdateFailed(err) from err

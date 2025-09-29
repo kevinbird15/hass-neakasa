@@ -41,19 +41,19 @@ async def get_shared_api(hass: HomeAssistant, username: str, password: str) -> N
     if credentials_key not in _shared_locks:
         _shared_locks[credentials_key] = asyncio.Lock()
     
-    # Check if we already have an API instance for these credentials
-    if credentials_key in _shared_apis:
-        api = _shared_apis[credentials_key]
-        # If the API is already connected, return it
-        if api.connected:
-            return api
-        # If not connected, we'll need to reconnect
-    
     # Use lock to prevent concurrent authentication attempts
     async with _shared_locks[credentials_key]:
-        # Double-check after acquiring lock
-        if credentials_key in _shared_apis and _shared_apis[credentials_key].connected:
-            return _shared_apis[credentials_key]
+        # Check if we already have a valid API instance for these credentials
+        if credentials_key in _shared_apis:
+            api = _shared_apis[credentials_key]
+            # If the API is connected and has valid tokens, return it
+            if api.connected and hasattr(api, '_iotToken') and api._iotToken:
+                _LOGGER.debug(f"Reusing existing shared API instance for {username}")
+                return api
+            else:
+                # Clear invalid API instance
+                _LOGGER.debug(f"Clearing invalid API instance for {username}")
+                del _shared_apis[credentials_key]
         
         # Create new API instance
         session = async_get_clientsession(hass)
@@ -61,9 +61,10 @@ async def get_shared_api(hass: HomeAssistant, username: str, password: str) -> N
         
         try:
             # Authenticate the API
+            _LOGGER.debug(f"Authenticating new shared API instance for {username}")
             await api.connect(username, password)
             _shared_apis[credentials_key] = api
-            _LOGGER.debug(f"Created new shared API instance for credentials: {username}")
+            _LOGGER.debug(f"Successfully created and authenticated shared API instance for {username}")
             return api
         except Exception as e:
             _LOGGER.error(f"Failed to authenticate shared API for {username}: {e}")
@@ -77,6 +78,18 @@ def clear_shared_api(username: str, password: str):
         del _shared_apis[credentials_key]
     if credentials_key in _shared_locks:
         del _shared_locks[credentials_key]
+
+
+async def force_reconnect_api(hass: HomeAssistant, username: str, password: str) -> NeakasaAPI:
+    """Force reconnection of the API for the given credentials."""
+    credentials_key = f"{username}:{password}"
+    
+    # Clear existing instance
+    if credentials_key in _shared_apis:
+        del _shared_apis[credentials_key]
+    
+    # Get a fresh API instance
+    return await get_shared_api(hass, username, password)
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:

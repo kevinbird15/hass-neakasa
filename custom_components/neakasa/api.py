@@ -296,6 +296,11 @@ class NeakasaAPI:
     async def getDeviceProperties(self, iotId: str):
         if self.connected == False:
             raise APIConnectionError("api not connected")
+        
+        # Debug logging for authentication tokens
+        _LOGGER.debug(f"Getting device properties for iotId: {iotId}")
+        _LOGGER.debug(f"API connected: {self.connected}, iotToken present: {hasattr(self, '_iotToken') and self._iotToken is not None}")
+        
         config = Config(
             app_key=self._app_key,
             app_secret=self._app_secret,
@@ -321,6 +326,8 @@ class NeakasaAPI:
         )
         response_data = json.loads(response.body)
         if response_data['code'] != 200:
+            _LOGGER.error(f"API Error - Code: {response_data['code']}, Message: {response_data['message']}")
+            _LOGGER.error(f"iotToken: {self._iotToken[:20] if hasattr(self, '_iotToken') and self._iotToken else 'None'}...")
             raise APIConnectionError("Error getting device properties: " + response_data['message'])
         return response_data['data']
 
