@@ -55,6 +55,7 @@ class NeakasaCoordinator(DataUpdateCoordinator):
         self.devicename = config_entry.data[CONF_FRIENDLY_NAME]
         self.username = config_entry.data[CONF_USERNAME]
         self.password = config_entry.data[CONF_PASSWORD]
+        # Weight unit will be determined by Home Assistant's unit system
 
         self._deviceName = None
         self.lastUseDate = None
@@ -144,6 +145,9 @@ class NeakasaCoordinator(DataUpdateCoordinator):
             self.lastUseDate = newLastUseDate
             
             records = await self._getRecords()
+            
+            # Simple debug logging for data update
+            _LOGGER.debug(f"Device {self.devicename}: {len(records.get('cat_list', []))} cats, {len(records.get('record_list', []))} records")
 
             try:
                 return NeakasaAPIData(
@@ -187,6 +191,9 @@ class NeakasaCoordinator(DataUpdateCoordinator):
                 self.lastUseDate = newLastUseDate
                 records = await self._getRecords()
                 
+                # Simple debug logging for data update (reconnection path)
+                _LOGGER.debug(f"Device {self.devicename} (reconnection): {len(records.get('cat_list', []))} cats, {len(records.get('record_list', []))} records")
+                
                 return NeakasaAPIData(
                     binFullWaitReset=devicedata['binFullWaitReset']['value'] == 1,
                     cleanCfg=devicedata['cleanCfg']['value'],
@@ -228,6 +235,9 @@ class NeakasaCoordinator(DataUpdateCoordinator):
                         self._recordsCache.mark_as_stale()
                     self.lastUseDate = newLastUseDate
                     records = await self._getRecords()
+                    
+                    # Simple debug logging for data update (identityId error path)
+                    _LOGGER.debug(f"Device {self.devicename} (identityId error): {len(records.get('cat_list', []))} cats, {len(records.get('record_list', []))} records")
                     
                     return NeakasaAPIData(
                         binFullWaitReset=devicedata['binFullWaitReset']['value'] == 1,

@@ -61,7 +61,37 @@ class NeakasaCatSensor(CoordinatorEntity):
         self._attr_translation_key = "cat_sensor"
         self._attr_translation_placeholders = {"name": catName}
         self._attr_unique_id = f"{coordinator.deviceid}-cat-{catId}"
-        self._attr_unit_of_measurement = UnitOfMass.KILOGRAMS
+        
+        # Use Home Assistant's automatic unit conversion
+        self._attr_device_class = SensorDeviceClass.WEIGHT
+        self._attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
+        
+        # Debug: Check HA unit system and set appropriate unit
+        def detect_weight_unit(hass) -> str:
+            units = hass.config.units
+
+            # Primary: identity compare against HA's singletons
+            if units is METRIC_SYSTEM:
+                return UnitOfMass.KILOGRAMS
+            if units is IMPERIAL_SYSTEM:
+                return UnitOfMass.POUNDS
+
+            # Fallback: some builds expose a boolean
+            if getattr(units, "is_metric", False):
+                return UnitOfMass.KILOGRAMS
+
+            # Safe default
+            return UnitOfMass.POUNDS
+
+        try:
+            from homeassistant.util.unit_system import METRIC_SYSTEM, IMPERIAL_SYSTEM
+            weight_unit = detect_weight_unit(coordinator.hass)
+            _LOGGER.debug(f"Cat {catId}: Detected weight unit: {weight_unit}")
+            self._attr_unit_of_measurement = weight_unit
+        except Exception as e:
+            _LOGGER.debug(f"Cat {catId}: Error detecting unit system: {e}, defaulting to POUNDS")
+            self._attr_unit_of_measurement = UnitOfMass.POUNDS
+        
         self._catId = catId
         if icon is not None:
             self._attr_icon = icon
@@ -74,25 +104,53 @@ class NeakasaCatSensor(CoordinatorEntity):
     
     @property
     def _records(self):
-        return list(filter(lambda record: record['cat_id'] == self._catId, self.coordinator.data.record_list))
+        all_records = self.coordinator.data.record_list
+        filtered_records = list(filter(lambda record: record['cat_id'] == self._catId, all_records))
+        
+        # Debug logging for record filtering
+        _LOGGER.debug(f"Cat {self._catId}: {len(filtered_records)} records out of {len(all_records)} total")
+        if len(all_records) > 0:
+            _LOGGER.debug(f"  Sample record cat_ids: {[r.get('cat_id', 'NO_CAT_ID') for r in all_records[:3]]}")
+        if len(filtered_records) > 0:
+            _LOGGER.debug(f"  Sample filtered record: {filtered_records[0]}")
+        
+        return filtered_records
 
     @property
     def state(self):
         if len(self._records) == 0:
-            return 0
+            _LOGGER.debug(f"Cat {self._catId}: No records found, returning None")
+            return None
         last_record = self._records[0]
-        return last_record['weight']
+        weight_kg = last_record['weight']
+        _LOGGER.debug(f"Cat {self._catId}: Found weight {weight_kg} kg from {len(self._records)} records")
+        
+        # Convert to display unit
+        if self._attr_unit_of_measurement == UnitOfMass.POUNDS:
+            weight_lbs = round(weight_kg * 2.20462, 1)
+            _LOGGER.debug(f"Cat {self._catId}: Converted {weight_kg} kg to {weight_lbs} lbs")
+            return weight_lbs
+        else:
+            _LOGGER.debug(f"Cat {self._catId}: Using kg value: {weight_kg}")
+            return weight_kg
+    
+    @property
+    def native_value(self):
+        return self.state
+    
     
     @property
     def extra_state_attributes(self):
-        if len(self._records) == 0:
-            return {}
-        last_record = self._records[0]
-        return {
-            "state_class": SensorStateClass.MEASUREMENT,
-            "start_time": datetime.fromtimestamp(last_record['start_time']),
-            "end_time": datetime.fromtimestamp(last_record['end_time'])
+        attributes = {
+            "state_class": SensorStateClass.MEASUREMENT
         }
+        if len(self._records) > 0:
+            last_record = self._records[0]
+            attributes.update({
+                "start_time": datetime.fromtimestamp(last_record['start_time']),
+                "end_time": datetime.fromtimestamp(last_record['end_time'])
+            })
+        return attributes
 
 class NeakasaSensor(CoordinatorEntity):
     

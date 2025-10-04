@@ -39,7 +39,7 @@
         },
         "sensor": {
             "cat_sensor": {
-                "name": "Cat {name}"
+                "name": "{name} Weight"
             },
             "sand_percent": {
                 "name": "Cat litter level"
